@@ -1,0 +1,69 @@
+tests:
+- wiki: |
+    {|
+    |}
+  html: |
+    <table>
+    </table>
+- wiki: |
+    {|
+    |Orange
+    |Apple
+    |-
+    |Bread
+    |Pie
+    |-
+    |Butter
+    |Ice cream
+    |}
+  html: |
+    <table>
+    <tr><td>Orange</td><td>Apple</td></tr>
+    <tr><td>Bread</td><td>Pie</td></tr>
+    <tr><td>Butter</td><td>Ice cream</td></tr>
+    </table>
+- wiki: |
+    {|
+    |Orange||Apple||more
+    |-
+    |Bread||Pie||more
+    |-
+    |Butter||Ice<br/>cream||and<br/>more
+    |}
+  html: |
+    <table>
+    <tr><td>Orange</td><td>Apple</td><td>more</td></tr>
+    <tr><td>Bread</td><td>Pie</td><td>more</td></tr>
+    <tr><td>Butter</td><td>Ice<br/>cream</td><td>and<br/>more</td></tr>
+    </table>
+
+- wiki: |
+    {|
+    |one
+    two
+    |}
+  html: |
+    <table>
+    <tr><td>one two</td></tr>
+    </table>
+
+- wiki: |
+    {|
+    ! Item
+    ! Amount
+    ! Cost
+    |-
+    |Orange
+    |10
+    |7.00
+    |-
+    !Total
+    |
+    |15.00
+    |}
+  html: |
+    <table>
+    <tr><th>Item</th><th>Amount</th><th>Cost</th></tr>
+    <tr><td>Orange</td><td>10</td><td>7.00</td></tr>
+    <tr><th>Total</th><td></td><td>15.00</td></tr>
+    </table>
