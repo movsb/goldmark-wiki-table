@@ -1,11 +1,13 @@
 tests:
-- wiki: |
+- description: dead simple table.
+  wiki: |
     {|
     |}
   html: |
     <table>
     </table>
-- wiki: |
+- description: minimal syntax
+  wiki: |
     {|
     |Orange
     |Apple
@@ -22,7 +24,8 @@ tests:
     <tr><td>Bread</td><td>Pie</td></tr>
     <tr><td>Butter</td><td>Ice cream</td></tr>
     </table>
-- wiki: |
+- description: multiple cells
+  wiki: |
     {|
     |Orange||Apple||more
     |-
@@ -36,8 +39,8 @@ tests:
     <tr><td>Bread</td><td>Pie</td><td>more</td></tr>
     <tr><td>Butter</td><td>Ice<br/>cream</td><td>and<br/>more</td></tr>
     </table>
-
-- wiki: |
+- description: longer texts
+  wiki: |
     {|
     |one
     two
@@ -47,23 +50,117 @@ tests:
     <tr><td>one two</td></tr>
     </table>
 
-- wiki: |
+- description: with headers
+  wiki: |
     {|
     ! Item
-    ! Amount
-    ! Cost
     |-
-    |Orange
-    |10
-    |7.00
+    | Orange
     |-
-    !Total
-    |
-    |15.00
+    | Apple
     |}
   html: |
     <table>
-    <tr><th>Item</th><th>Amount</th><th>Cost</th></tr>
-    <tr><td>Orange</td><td>10</td><td>7.00</td></tr>
-    <tr><th>Total</th><td></td><td>15.00</td></tr>
+    <tr><th>Item</th></tr>
+    <tr><td>Orange</td></tr>
+    <tr><td>Apple</td></tr>
+    </table>
+- description: with styles
+  wiki: |
+    {| class="wikitable" style="color:green; background-color:#ffffcc;" cellpadding="10"
+    |Orange
+    |Apple
+    |-
+    |Bread
+    |Pie
+    |-
+    |Butter
+    |Ice cream
+    |}
+  html: |
+    <table class="wikitable" style="color:green; background-color:#ffffcc;" cellpadding="10">
+    <tr><td>Orange</td><td>Apple</td></tr>
+    <tr><td>Bread</td><td>Pie</td></tr>
+    <tr><td>Butter</td><td>Ice cream</td></tr>
+    </table>
+- description: with spans
+  wiki: |
+    {| class="wikitable"
+    !colspan="6"|Shopping List
+    |-
+    |rowspan="2"|Bread & Butter
+    |Pie
+    |Buns
+    |Danish
+    |colspan="2"|Croissant
+    |-
+    |Cheese
+    |colspan="2"|Ice cream
+    |Butter
+    |Yogurt
+    |}
+  html: |
+    <table class="wikitable">
+    <tr><th colspan="6">Shopping List</th></tr>
+    <tr><td rowspan="2">Bread &amp; Butter</td><td>Pie</td><td>Buns</td><td>Danish</td><td colspan="2">Croissant</td></tr>
+    <tr><td>Cheese</td><td colspan="2">Ice cream</td><td>Butter</td><td>Yogurt</td></tr>
+    </table>
+- description: with caption
+  wiki: |
+    {| class="wikitable"
+    |+ style="caption-side:bottom; color:#e76700;"|Food complements
+    |-
+    ! style="color:green" | Fruits
+    ! style="color:red" | Fats
+    |-
+    |Orange
+    |Butter
+    |-
+    |Pear
+    |Pie
+    |-
+    |Apple
+    |Ice cream
+    |}
+  html: |
+    <table class="wikitable">
+    <caption style="caption-side:bottom; color:#e76700;">Food complements</caption>
+    <tr><th style="color:green">Fruits</th><th style="color:red">Fats</th></tr>
+    <tr><td>Orange</td><td>Butter</td></tr>
+    <tr><td>Pear</td><td>Pie</td></tr>
+    <tr><td>Apple</td><td>Ice cream</td></tr>
+    </table>
+- description: table in a tale
+  wiki: |
+    {|
+    |+ An example table
+    |-
+    ! First header
+    ! colspan="2" | Second header
+    |-
+    | Upper left
+    | Upper middle
+    | rowspan="2" | Right side
+    |-
+    | Lower left
+    | Lower middle
+    |-
+    | colspan="3"| Text before a nested table...
+    {|
+    |+ A table in a table
+    | AAA
+    | BBB
+    |}
+    |}
+  html: |
+    <table>
+    <caption>An example table</caption>
+    <tr><th>First header</th><th colspan="2">Second header</th></tr>
+    <tr><td>Upper left</td><td>Upper middle</td><td rowspan="2">Right side</td></tr>
+    <tr><td>Lower left</td><td>Lower middle</td></tr>
+    <tr><td colspan="3">Text before a nested table...<table>
+    <caption>A table in a table</caption>
+    <tr><td>AAA</td><td>BBB</td></tr>
+    </table>
+    </td></tr>
     </table>
