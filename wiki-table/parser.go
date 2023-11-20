@@ -1,4 +1,4 @@
-package main
+package wikitable
 
 /* TODO:
 - Pipe character as content. (needs escape <nowiki>)
@@ -6,129 +6,126 @@ package main
 - '' for italic, ''' for bold (markdown already has)
 - Blank spaces at the beginning of a line are ignored. (not ignored)
 - scope=col/row support (can use styles instead)
-- {{sticky header}}
+- {{sticky header}} (wiki-specific)
 */
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"io"
-	"log"
-	"os"
 	"strings"
-
-	"gopkg.in/yaml.v2"
 )
 
-type Test struct {
-	Wiki        string `yaml:"wiki"`
-	Html        string `yaml:"html"`
-	Description string `yaml:"description"`
-}
-
-type ByteReader struct {
-	b []byte
-	p int
-}
-
-func NewByteReader(s string) *ByteReader {
-	return &ByteReader{
-		b: []byte(s),
-		p: 0,
-	}
-}
-
-func (r *ByteReader) ReadByte() (byte, error) {
-	if r.p >= len(r.b) {
-		return 0, io.EOF
-	}
-	b := r.b[r.p]
-	r.p++
-	return b, nil
-}
-
-func (r *ByteReader) peekAt(n int) (byte, error) {
-	if r.p+n >= len(r.b) {
-		return 0, io.EOF
-	}
-	return r.b[r.p+n], nil
-}
-
-func (r *ByteReader) GetPos() int {
-	return r.p
-}
-
-func (r *ByteReader) SetPos(pos int) {
-	r.p = pos
-}
-
-func (r *ByteReader) PutBackOneByte() {
-	r.p--
-}
-
 type Parser struct {
-	r *ByteReader
+	b []byte
+	i int
+	j int
+	m int
 }
 
-func (p *Parser) fatal(err error) {
+// maxProcessingSize: a simple naive buffer size to enabling seeking rewind.
+func NewParserSize(maxProcessingSize int) *Parser {
+	return &Parser{
+		j: maxProcessingSize,
+		m: maxProcessingSize,
+	}
+}
+
+func Parse(r io.Reader) (*Table, error) {
+	return NewParserSize(1 << 20).Parse(r)
+}
+
+func (p *Parser) mark() func() {
+	i := p.i
+	return func() { p.i = i }
+}
+
+func (p *Parser) fatal(err string) {
 	panic(err)
 }
 
+func (p *Parser) remains() int {
+	return p.j - p.i
+}
+
+func (p *Parser) read() byte {
+	if p.remains() < 1 {
+		panic("read eof")
+	}
+	b := p.b[p.i]
+	p.i++
+	return b
+}
+
 func (p *Parser) expect(rs ...byte) {
+	if p.remains() < len(rs) {
+		panic("eof expecting")
+	}
+
 	for _, r := range rs {
-		c, err := p.r.ReadByte()
-		if err != nil {
-			p.fatal(err)
-		}
-		if c != r {
-			p.fatal(fmt.Errorf(`unexpected %c: expected %c`, c, r))
+		if c := p.read(); c != r {
+			p.fatal(fmt.Sprintf(`unexpected %c: expected %c`, c, r))
 		}
 	}
 }
 
 func (p *Parser) skip(rs ...byte) bool {
-	pp := p.r.GetPos()
+	if p.remains() < len(rs) {
+		return false
+	}
+
+	restoreFn := p.mark()
 	restore := true
+
 	defer func() {
 		if restore {
-			p.r.SetPos(pp)
+			restoreFn()
 		}
 	}()
+
 	for _, r := range rs {
-		c, err := p.r.ReadByte()
-		if err != nil {
-			return false
-		}
-		if c != r {
+		if c := p.read(); c != r {
 			return false
 		}
 	}
+
 	restore = false
 	return true
+}
+
+func (p *Parser) peek() byte {
+	return p.peekAt(0)
+}
+
+func (p *Parser) peekAt(n int) byte {
+	if p.remains() < n+1 {
+		return 0xFF
+	}
+	return p.b[p.i+n]
+}
+
+func (p *Parser) advance(n int) {
+	p.i += n
 }
 
 func (p *Parser) parseCellData() []any {
 	parseText := func() (string, bool) {
 		b := []byte{}
 		for {
-			c, err := p.r.ReadByte()
-			if err != nil {
-				p.fatal(err)
-			}
-			if c == '|' {
-				p.r.PutBackOneByte()
+			c := p.peek()
+			if c == '|' || c == '!' {
 				break
 			} else if c == '\n' {
-				x, err := p.r.ReadByte()
-				if err == nil && x != '|' && x != '!' && x != '{' {
-					p.r.PutBackOneByte()
+				c2 := p.peekAt(1)
+				if c2 != 0xFF && c2 != '|' && c2 != '!' && c2 != '{' {
+					p.advance(1)
 					b = append(b, ' ')
 					continue
 				}
-				p.r.PutBackOneByte()
-				p.r.PutBackOneByte()
 				break
 			} else {
+				p.advance(1)
 				b = append(b, c)
 			}
 		}
@@ -137,7 +134,7 @@ func (p *Parser) parseCellData() []any {
 	parseTable := func() (*Table, bool) {
 		if p.peekAt(0) == '\n' && p.peekAt(1) == '{' && p.peekAt(2) == '|' {
 			p.advance(1)
-			return p.parseTable(""), true
+			return p.parseTable(), true
 		}
 		return nil, false
 	}
@@ -157,22 +154,6 @@ func (p *Parser) parseCellData() []any {
 	}
 
 	return data
-}
-
-func (p *Parser) peek() byte {
-	return p.peekAt(0)
-}
-
-func (p *Parser) peekAt(n int) byte {
-	b, err := p.r.peekAt(n)
-	if err != nil {
-		return 0xFF
-	}
-	return b
-}
-
-func (p *Parser) advance(n int) {
-	p.r.p++
 }
 
 func (p *Parser) skipSpaces() {
@@ -213,7 +194,7 @@ func (a *Attributes) String() string {
 }
 
 func (p *Parser) parseAttributes() *Attributes {
-	pp := p.r.GetPos()
+	restore := p.mark()
 
 	attrs := &Attributes{}
 
@@ -226,7 +207,7 @@ func (p *Parser) parseAttributes() *Attributes {
 			if c == 0xFF || c == '|' || c == '\n' {
 				// no attrs, may be data.
 				if attrs.Count() == 0 {
-					p.r.SetPos(pp)
+					restore()
 				}
 				return attrs
 			} else if c == '=' || c == ' ' {
@@ -237,12 +218,12 @@ func (p *Parser) parseAttributes() *Attributes {
 			}
 		}
 		if string(name) == "" {
-			p.r.SetPos(pp)
+			restore()
 			return attrs
 		}
 		p.skipSpaces()
 		if p.peek() != '=' {
-			p.r.SetPos(pp)
+			restore()
 			return attrs
 		}
 
@@ -275,7 +256,7 @@ func (p *Parser) parseAttributes() *Attributes {
 		}
 
 		if string(value) == "" && !quoted {
-			p.r.SetPos(pp)
+			restore()
 			return attrs
 		}
 
@@ -290,16 +271,16 @@ func (p *Parser) parseAttributes() *Attributes {
 }
 
 type _Base struct {
-	Name             string
-	Attributes       *Attributes
+	name             string
+	attributes       *Attributes
 	openWithNewline  bool
 	closeWithNewline bool
 }
 
 func (e *_Base) Open(w io.Writer) {
-	fmt.Fprint(w, `<`, e.Name)
-	if e.Attributes != nil && e.Attributes.Count() > 0 {
-		fmt.Fprint(w, ` `, e.Attributes)
+	fmt.Fprint(w, `<`, e.name)
+	if e.attributes != nil && e.attributes.Count() > 0 {
+		fmt.Fprint(w, ` `, e.attributes)
 	}
 	fmt.Fprint(w, `>`)
 	if e.openWithNewline {
@@ -308,7 +289,7 @@ func (e *_Base) Open(w io.Writer) {
 }
 
 func (e *_Base) Close(w io.Writer) {
-	fmt.Fprint(w, `</`, e.Name, `>`)
+	fmt.Fprint(w, `</`, e.name, `>`)
 	if e.closeWithNewline {
 		fmt.Fprintln(w)
 	}
@@ -323,7 +304,7 @@ type Table struct {
 func NewTable() *Table {
 	return &Table{
 		_Base: _Base{
-			Name:             `table`,
+			name:             `table`,
 			openWithNewline:  true,
 			closeWithNewline: true,
 		},
@@ -357,7 +338,7 @@ type Caption struct {
 func NewCaption(caption string) *Caption {
 	return &Caption{
 		_Base: _Base{
-			Name:             `caption`,
+			name:             `caption`,
 			openWithNewline:  false,
 			closeWithNewline: true,
 		},
@@ -376,7 +357,7 @@ type Row struct {
 }
 
 func NewRow() *Row {
-	return &Row{_Base: _Base{Name: `tr`, closeWithNewline: true}}
+	return &Row{_Base: _Base{name: `tr`, closeWithNewline: true}}
 }
 
 func (r *Row) AddCell(cell *Cell) {
@@ -395,8 +376,6 @@ type Cell struct {
 	_Base
 	IsHeader bool
 	Items    []any // Texts and Tables
-	// Text     string
-	// Table    *Table // exclusive with Text
 }
 
 func NewCell(header bool, items ...any) *Cell {
@@ -404,7 +383,7 @@ func NewCell(header bool, items ...any) *Cell {
 	if !header {
 		name = `td`
 	}
-	return &Cell{_Base: _Base{Name: name}, Items: items}
+	return &Cell{_Base: _Base{name: name}, Items: items}
 }
 
 var keepTags = strings.NewReplacer("&", "&amp;")
@@ -430,22 +409,58 @@ func (p *Parser) parseCell(header bool) *Cell {
 	}
 	data := p.parseCellData()
 	cell := NewCell(header, data...)
-	cell.Attributes = attrs
+	cell.attributes = attrs
 	return cell
 }
 
-func (p *Parser) parseTable(w string) *Table {
-	if w != "" {
-		p.r = NewByteReader(w)
+func (p *Parser) Parse(r io.Reader) (table *Table, err error) {
+	b, err := io.ReadAll(io.LimitReader(r, int64(p.m)))
+	if err != nil {
+		return nil, err
 	}
+	p.i, p.j, p.b = 0, len(b), b
+
+	t := [1]byte{}
+	if _, err := r.Read(t[:]); err != io.EOF {
+		return nil, errors.New(`data too large`)
+	}
+
+	defer func() {
+		if err2 := recover(); err2 != nil {
+			err = fmt.Errorf("error parsing wiki-table: %v", err2)
+			// panic(err2) // for debug
+		}
+	}()
+
+	return p.parseTable(), nil
+}
+
+func (p *Parser) parseTable() *Table {
 	p.expect('{', '|')
 	m := p.parseAttributes()
 	table := NewTable()
-	table.Attributes = m
+	table.attributes = m
 	p.skipSpaces()
 	p.expect('\n')
 
 	tr := (*Row)(nil)
+
+	parseCell := func(header bool) {
+		if tr == nil {
+			tr = NewRow()
+			table.AddRow(tr)
+		}
+		cell := p.parseCell(header)
+		tr.AddCell(cell)
+		if p.peek() == '\n' {
+			p.advance(1)
+		} else if p.peekAt(0) == '|' && p.peekAt(1) == '|' {
+			p.advance(1)
+		} else if p.peekAt(0) == '!' && p.peekAt(1) == '!' {
+			p.advance(1)
+		}
+	}
+
 	for {
 		if p.skip('|') {
 			if p.skip('}') {
@@ -460,7 +475,7 @@ func (p *Parser) parseTable(w string) *Table {
 				if len(data) == 1 {
 					if text, ok := data[0].(string); ok {
 						caption := NewCaption(text)
-						caption.Attributes = attrs
+						caption.attributes = attrs
 						table.Caption = caption
 						p.expect('\n')
 						continue
@@ -472,77 +487,15 @@ func (p *Parser) parseTable(w string) *Table {
 				tr = nil
 				continue
 			} else {
-				if tr == nil {
-					tr = NewRow()
-					table.AddRow(tr)
-				}
-				cell := p.parseCell(false)
-				tr.AddCell(cell)
-				if p.peek() == '\n' {
-					p.advance(1)
-				} else if p.peekAt(0) == '|' && p.peekAt(1) == '|' {
-					p.advance(1)
-				}
+				parseCell(false)
 			}
 		} else if p.skip('!') {
-			if tr == nil {
-				tr = NewRow()
-				table.AddRow(tr)
-			}
-			cell := p.parseCell(true)
-			tr.AddCell(cell)
-			if p.peek() == '\n' {
-				p.advance(1)
-			} else if p.peekAt(0) == '|' && p.peekAt(1) == '|' {
-				p.advance(1)
-			}
+			parseCell(true)
 		} else {
-			b, err := p.r.ReadByte()
-			p.fatal(fmt.Errorf(`unexpected: %c, err: %v`, b, err))
+			b := p.read()
+			p.fatal(fmt.Sprintf(`unexpected: %c`, b))
 		}
 	}
 
 	return table
-}
-
-func main() {
-	fp, err := os.Open(`test.yaml`)
-	if err != nil {
-		panic(err)
-	}
-	defer fp.Close()
-
-	var file = struct {
-		Tests []Test `yaml:"tests"`
-	}{}
-	yd := yaml.NewDecoder(fp)
-	if err := yd.Decode(&file); err != nil {
-		panic(err)
-	}
-
-	fmt.Println(`<style> table,th,td {border-collapse: collapse;} th,td { border: 1px solid red; padding: 8px; } table { margin: 1em; }</style>`)
-
-	for i, test := range file.Tests {
-		log.Println(`test:`, i, test.Description)
-		if strings.TrimSpace(test.Wiki) == "" || strings.TrimSpace(test.Html) == "" {
-			log.Fatalln("empty wiki or html")
-		}
-		p := &Parser{}
-		if i == 8 {
-			log.Println("stop here")
-		}
-		table := p.parseTable(test.Wiki)
-		buf := strings.Builder{}
-		table.Html(&buf)
-		html := buf.String()
-		if html != test.Html {
-			log.Println("+++not equal")
-			log.Println(html)
-			log.Println("===")
-			log.Println(test.Html)
-			log.Println("---not equal")
-			log.Fatalln()
-		}
-		fmt.Println(html)
-	}
 }
