@@ -2,6 +2,8 @@
 
 An experimental Wikipedia/MediaWiki table parser and renderer written in golang.
 
+[Try it in your browser](https://movsb.github.io/goldmark-wiki-table/)
+
 ## Why?
 
 The GitHub Flavored Markdown Table syntax sometimes cannot express complex tables, or tables with styles, or tables with colspans and rowspans.
