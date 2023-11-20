@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Wiki Table Parser/Renderer</title>
+<style>
+#wrapper {
+	display: flex;
+	flex-wrap: wrap;
+}
+#input, #html {
+	font-family: monospace;
+	white-space: pre;
+}
+#input, #result {
+	flex: 1 1 45%;
+	margin: 8px;
+	padding: 8px;
+	border: 1px solid #ccc;
+	height: 350px;
+	overflow: auto;
+	height: 60vh;
+}
+table, th, td {
+	border-collapse: collapse;
+	border: 1px solid #ccc;
+}
+th, td {
+	padding: 0.5em;
+}
+</style>
+</head>
+<body>
+<script src="wasm_exec.js"></script>
+<script>
+	const go = new Go();
+	WebAssembly.instantiateStreaming(
+		fetch("worker.wasm"),
+		go.importObject
+	).then((result) => {
+		go.run(result.instance);
+	});
+</script>
+<div id=wrapper>
+<div id=input contenteditable>{| class="wikitable" 
+|-
+! colspan="6" style="text-align:center;" | Shopping List
+|-
+| rowspan="2" | Bread & Butter
+| style="font-weight:bold;" | Pie
+| style="background-color:#ffce93;" | Buns
+| Danish
+| colspan="2" style="color:#fe0000;" | Croissant
+|-
+| Cheese
+| colspan="2" style="text-align:right; font-style:italic;" | Ice cream
+| Butter
+| style="text-decoration:underline;" | Yogurt
+|}
+</div>
+<div id=result></div>
+</div>
+<script>
+setInterval(function() {
+	let table = document.getElementById("input").innerText.trim();
+	if (table == "") { return; } 
+	let html = parse(table);
+	document.getElementById("result").innerHTML = html;
+}, 1000);
+</script>
+<div><i>This is a WebAssembly instance compiled from Go, running in your browser.
+The source code is at <a target="_blank" href="https://github.com/movsb/goldmark-wiki-table/tree/wasm/docs">wasm</a> branch.</i></div>
+</body>
+</html>
