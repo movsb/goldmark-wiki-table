@@ -124,6 +124,8 @@ func (p *Parser) parseCellData() []any {
 					continue
 				}
 				break
+			} else if c == 0xFF {
+				p.fatal(`unexpected eof`)
 			} else {
 				p.advance(1)
 				b = append(b, c)
