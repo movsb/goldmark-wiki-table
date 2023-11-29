@@ -60,12 +60,19 @@ func (p *Parser) read() byte {
 
 func (p *Parser) expect(rs ...byte) {
 	if p.remains() < len(rs) {
-		panic("eof expecting")
+		panic("premature eof")
 	}
 
 	for _, r := range rs {
 		if c := p.read(); c != r {
-			p.fatal(fmt.Sprintf(`unexpected %c: expected %c`, c, r))
+			cs, rs := string(c), string(r)
+			if c == '\n' {
+				cs = `<newline>`
+			}
+			if r == '\n' {
+				rs = `<newline>`
+			}
+			p.fatal(fmt.Sprintf(`unexpected %s: expected %s`, cs, rs))
 		}
 	}
 }
